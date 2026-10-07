@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 60 - Legend Of A Bully</title>
+    <!-- Tailwind CSS for modern responsive UI layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for RPG Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter & Press Start 2P for retro-modern gaming feel -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            overflow: hidden;
+            user-select: none;
+        }
+        .pixel-font {
+            font-family: 'Press Start 2P', monospace;
+        }
+        /* Custom scrollbar for inventory & quest logs */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.8);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 3px;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex flex-col relative">
+
+    <script>
+        // Synthesizer for retro game sound effects using Web Audio API
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+            }
+            playTone(freq, type, duration, vol = 0.1) {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e) {
+                    // Audio context blocked until interaction
+                }
+            }
+            hit() { this.playTone(150, 'sawtooth', 0.15, 0.15); }
+            swing() { this.playTone(300, 'triangle', 0.1, 0.1); }
+            pickup() { this.playTone(587.33, 'sine', 0.2, 0.15); setTimeout(()=>this.playTone(880, 'sine', 0.3, 0.15), 100); }
+            levelUp() { 
+                [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
+                    setTimeout(() => this.playTone(f, 'square', 0.2, 0.1), i * 120);
+                });
+            }
+            bossDefeat() {
+                [400, 300, 200, 100].forEach((f, i) => {
+                    setTimeout(() => this.playTone(f, 'sawtooth', 0.3, 0.2), i * 150);
+                });
+            }
+        }
+        const sfx = new SoundFX();
+    </script>
+
+    <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-2 flex items-center justify-between z-20 shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="bg-blue-600 text-white px-3 py-1 rounded-lg pixel-font text-xs shadow-md border border-blue-400">
+                CH. 60
+            </div>
+            <h1 class="font-bold text-lg md:text-xl tracking-wide bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
+                Legend Of A Bully <span class="text-xs text-slate-400 font-normal hidden sm:inline">by Nicky Jones Jonathan & The Rages Band</span>
+            </h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button onclick="toggleModal('questModal')" class="bg-slate-800 hover:bg-slate-700 text-blue-400 px-3 py-1.5 rounded-lg text-sm font-semibold border border-slate-700 transition flex items-center space-x-2">
+                <i class="fa-solid fa-scroll"></i>
+                <span class="hidden sm:inline">Quests</span>
+            </button>
+            <button onclick="toggleModal('skillModal')" class="bg-slate-800 hover:bg-slate-700 text-purple-400 px-3 py-1.5 rounded-lg text-sm font-semibold border border-slate-700 transition flex items-center space-x-2">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <span class="hidden sm:inline">Skills</span>
+            </button>
+            <button onclick="toggleModal('invModal')" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 px-3 py-1.5 rounded-lg text-sm font-semibold border border-slate-700 transition flex items-center space-x-2">
+                <i class="fa-solid fa-backpack"></i>
+                <span class="hidden sm:inline">Inventory</span>
+            </button>
+            <button onclick="toggleModal('loreModal')" class="bg-slate-800 hover:bg-slate-700 text-amber-400 px-3 py-1.5 rounded-lg text-sm font-semibold border border-slate-700 transition flex items-center space-x-2">
+                <i class="fa-solid fa-book-open"></i>
+                <span class="hidden sm:inline">Story</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 relative flex overflow-hidden bg-slate-950">
+        <!-- 3D/2.5D Canvas Container -->
+        <div class="absolute inset-0 flex items-center justify-center">
+            <canvas id="gameCanvas" class="w-full h-full shadow-2xl"></canvas>
+        </div>
+
+        <!-- Floating HUD Overlays -->
+        <div class="absolute top-4 left-4 z-10 flex flex-col space-y-2 pointer-events-none">
+            <!-- Player Status Card -->
+            <div class="bg-slate-900/80 backdrop-blur-md border border-slate-800 p-3 rounded-xl shadow-xl w-64 pointer-events-auto">
+                <div class="flex justify-between items-center mb-2">
+                    <span id="playerName" class="font-bold text-sm text-blue-300">Good Bully Hero</span>
+                    <span id="playerLevel" class="bg-blue-600/30 text-blue-300 px-2 py-0.5 rounded text-xs pixel-font">LVL 1</span>
+                </div>
+                <!-- HP Bar -->
+                <div class="mb-1.5">
+                    <div class="flex justify-between text-xs text-slate-400 mb-0.5">
+                        <span>HP</span>
+                        <span id="hpText">100/100</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div id="hpBar" class="bg-red-500 h-full transition-all duration-300" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <!-- XP Bar -->
+                <div class="mb-1.5">
+                    <div class="flex justify-between text-xs text-slate-400 mb-0.5">
+                        <span>XP</span>
+                        <span id="xpText">0/100</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div id="xpBar" class="bg-blue-500 h-full transition-all duration-300" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <!-- Humility & Stats -->
+                <div class="grid grid-cols-3 gap-1 pt-1 border-t border-slate-800 text-center text-xs">
+                    <div class="bg-slate-800/50 p-1 rounded">
+                        <span class="text-slate-400 block text-[10px]">ATK</span>
+                        <span id="statAtk" class="font-bold text-amber-400">15</span>
+                    </div>
+                    <div class="bg-slate-800/50 p-1 rounded">
+                        <span class="text-slate-400 block text-[10px]">DEF</span>
+                        <span id="statDef" class="font-bold text-emerald-400">10</span>
+                    </div>
+                    <div class="bg-slate-800/50 p-1 rounded">
+                        <span class="text-slate-400 block text-[10px]">HUMILTY</span>
+                        <span id="statHumility" class="font-bold text-purple-400">50</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Quest Tracker -->
+            <div class="bg-slate-900/80 backdrop-blur-md border border-slate-800 p-3 rounded-xl shadow-xl w-64 pointer-events-auto hidden sm:block">
+                <div class="flex items-center space-x-2 text-xs font-bold text-amber-400 mb-1">
+                    <i class="fa-solid fa-bullseye"></i>
+                    <span>ACTIVE QUEST</span>
+                </div>
+                <div id="activeQuestTitle" class="text-xs font-semibold text-slate-200">Chapter 1: Unite the Humble Townspeople</div>
+                <div id="activeQuestDesc" class="text-[11px] text-slate-400 mt-1">Talk to the villagers in Legend Of A Bully town to build camaraderie against the 5 Bad Bullies.</div>
+            </div>
+        </div>
+
+        <!-- Controls Helper (Mobile/Touch & Desktop) -->
+        <div class="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 z-10 flex flex-col md:flex-row items-center justify-between gap-3 pointer-events-none">
+            <!-- Virtual D-Pad for Mobile/Touch -->
+            <div class="bg-slate-900/80 backdrop-blur-md border border-slate-800 p-3 rounded-xl shadow-xl pointer-events-auto flex flex-col items-center select-none">
+                <div class="text-[10px] text-slate-400 mb-1 pixel-font">CONTROLS (WASD / Arrows)</div>
+                <div class="grid grid-cols-3 gap-1 w-32 h-24">
+                    <div></div>
+                    <button ontouchstart="setKey('ArrowUp', true)" ontouchend="setKey('ArrowUp', false)" onmousedown="setKey('ArrowUp', true)" onmouseup="setKey('ArrowUp', false)" class="bg-slate-800 hover:bg-slate-700 active:bg-blue-600 rounded flex items-center justify-center text-slate-200"><i class="fa-solid fa-chevron-up"></i></button>
+                    <div></div>
+                    <button ontouchstart="setKey('ArrowLeft', true)" ontouchend="setKey('ArrowLeft', false)" onmousedown="setKey('ArrowLeft', true)" onmouseup="setKey('ArrowLeft', false)" class="bg-slate-800 hover:bg-slate-700 active:bg-blue-600 rounded flex items-center justify-center text-slate-200"><i class="fa-solid fa-chevron-left"></i></button>
+                    <button ontouchstart="setKey('KeySpace', true)" ontouchend="setKey('KeySpace', false)" onmousedown="setKey('KeySpace', true)" onmouseup="setKey('KeySpace', false)" class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded flex items-center justify-center text-white text-xs font-bold" title="Attack"><i class="fa-solid fa-sword"></i></button>
+                    <button ontouchstart="setKey('ArrowRight', true)" ontouchend="setKey('ArrowRight', false)" onmousedown="setKey('ArrowRight', true)" onmouseup="setKey('ArrowRight', false)" class="bg-slate-800 hover:bg-slate-700 active:bg-blue-600 rounded flex items-center justify-center text-slate-200"><i class="fa-solid fa-chevron-right"></i></button>
+                    <div></div>
+                    <button ontouchstart="setKey('ArrowDown', true)" ontouchend="setKey('ArrowDown', false)" onmousedown="setKey('ArrowDown', true)" onmouseup="setKey('ArrowDown', false)" class="bg-slate-800 hover:bg-slate-700 active:bg-blue-600 rounded flex items-center justify-center text-slate-200"><i class="fa-solid fa-chevron-down"></i></button>
+                    <div></div>
+                </div>
+            </div>
+
+            <!-- Action Buttons (Attack / Interact / Skill) -->
+            <div class="bg-slate-900/80 backdrop-blur-md border border-slate-800 p-3 rounded-xl shadow-xl pointer-events-auto flex items-center space-x-3">
+                <button onclick="playerAttack()" class="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold px-4 py-3 rounded-xl shadow-lg border border-red-500 flex items-center space-x-2 active:scale-95 transition">
+                    <i class="fa-solid fa-hand-fist text-lg"></i>
+                    <span class="pixel-font text-xs">ATTACK (SPACE)</span>
+                </button>
+                <button onclick="playerInteract()" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-4 py-3 rounded-xl shadow-lg border border-blue-500 flex items-center space-x-2 active:scale-95 transition">
+                    <i class="fa-solid fa-comments text-lg"></i>
+                    <span class="pixel-font text-xs">INTERACT (E)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Interactive Dialogue Box Overlay -->
+        <div id="dialogueBox" class="absolute bottom-24 left-1/2 transform -translate-x-1/2 w-11/12 max-w-2xl bg-slate-900/95 border-2 border-blue-500/80 p-5 rounded-2xl shadow-2xl z-30 hidden backdrop-blur-md">
+            <div class="flex items-start space-x-4">
+                <div id="dialogueAvatar" class="w-12 h-12 rounded-xl bg-blue-600/30 border border-blue-400 flex items-center justify-center text-blue-300 text-xl font-bold flex-shrink-0">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+                <div class="flex-1">
+                    <h3 id="dialogueSpeaker" class="font-bold text-blue-400 text-sm mb-1">Good Bully Leader</h3>
+                    <p id="dialogueText" class="text-slate-200 text-sm leading-relaxed mb-3">Welcome to Legend Of A Bully. We must unite with the townspeople to defeat the bad bullies' arrogance!</p>
+                    <div class="flex justify-end space-x-2">
+                        <button onclick="closeDialogue()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded-lg font-semibold transition">Continue</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Quests Modal -->
+    <div id="questModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-slate-800/80 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                <div class="flex items-center space-x-2 text-blue-400 font-bold">
+                    <i class="fa-solid fa-scroll"></i>
+                    <span>Quest Log - Legend Of A Bully</span>
+                </div>
+                <button onclick="toggleModal('questModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-4 flex-1">
+                <div class="bg-slate-800/50 border border-slate-700 p-4 rounded-xl">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-bold text-sm text-amber-400">Chapter 1: The Ethics On Isolation Of The Bullies</h4>
+                        <span id="q1Status" class="bg-blue-500/20 text-blue-300 text-[10px] px-2 py-0.5 rounded font-bold">IN PROGRESS</span>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed mb-3">Talk to the villagers in Legend Of A Bully town. Warn them not to fall for the bad bullies' fake news and build camaraderie.</p>
+                    <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                        <div id="q1Bar" class="bg-blue-500 h-full w-1/3"></div>
+                    </div>
+                </div>
+                <div class="bg-slate-800/50 border border-slate-700 p-4 rounded-xl">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-bold text-sm text-slate-400">Chapter 2: Defeating Fake News & Buffering</h4>
+                        <span id="q2Status" class="bg-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded font-bold">LOCKED</span>
+                    </div>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-3">Defeat the 5 Bad Bullies and counter President Jhay Hamps's false accusations and overthinking buffering effects.</p>
+                </div>
+                <div class="bg-slate-800/50 border border-slate-700 p-4 rounded-xl">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-bold text-sm text-slate-400">Chapter 3: Camaraderie Unites For Peace</h4>
+                        <span id="q3Status" class="bg-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded font-bold">LOCKED</span>
+                    </div>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-3">Restore absolute peace to Legend Of A Bully by proving humility beats arrogance.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skills Modal -->
+    <div id="skillModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-slate-800/80 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                <div class="flex items-center space-x-2 text-purple-400 font-bold">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                    <span>Skill Tree & Humility Boosts</span>
+                </div>
+                <button onclick="toggleModal('skillModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-4 flex-1">
+                <div class="bg-slate-800/50 border border-slate-700 p-4 rounded-xl flex items-center justify-between">
+                    <div>
+                        <h4 class="font-bold text-sm text-purple-300">Humble Shield (Lv. 1)</h4>
+                        <p class="text-xs text-slate-400">Reduces damage from bad bullies' gossip attacks by 20%.</p>
+                    </div>
+                    <button onclick="unlockSkill('shield')" id="btnShield" class="bg-purple-600 hover:bg-purple-500 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition">Unlocked</button>
+                </div>
+                <div class="bg-slate-800/50 border border-slate-700 p-4 rounded-xl flex items-center justify-between">
+                    <div>
+                        <h4 class="font-bold text-sm text-slate-300">Camaraderie Wave (Lv. 2)</h4>
+                        <p class="text-xs text-slate-400">Summon villagers to deal AOE damage against fake news.</p>
+                    </div>
+                    <button onclick="unlockSkill('wave')" id="btnWave" class="bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs px-3 py-1.5 rounded-lg font-bold transition">Unlock (50 XP)</button>
+                </div>
+                <div class="bg-slate-800/50 border border-slate-700 p-4 rounded-xl flex items-center justify-between">
+                    <div>
+                        <h4 class="font-bold text-sm text-slate-300">Truth Aura (Lv. 3)</h4>
+                        <p class="text-xs text-slate-400">Instantly clears buffering overthinking effects from bad bullies.</p>
+                    </div>
+                    <button onclick="unlockSkill('aura')" id="btnAura" class="bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs px-3 py-1.5 rounded-lg font-bold transition">Unlock (120 XP)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Modal -->
+    <div id="invModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-slate-800/80 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                <div class="flex items-center space-x-2 text-emerald-400 font-bold">
+                    <i class="fa-solid fa-backpack"></i>
+                    <span>Inventory & Equipment</span>
+                </div>
+                <button onclick="toggleModal('invModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto grid grid-cols-3 gap-3 flex-1" id="inventoryGrid">
+                <div class="bg-slate-800/50 border border-emerald-500/50 p-3 rounded-xl flex flex-col items-center text-center">
+                    <i class="fa-solid fa-shield-halved text-emerald-400 text-2xl mb-2"></i>
+                    <span class="font-bold text-xs text-slate-200">Humble Badge</span>
+                    <span class="text-[10px] text-slate-400 mt-1">+10 Humility</span>
+                </div>
+                <div class="bg-slate-800/50 border border-slate-700 p-3 rounded-xl flex flex-col items-center text-center opacity-60">
+                    <i class="fa-solid fa-scroll text-slate-500 text-2xl mb-2"></i>
+                    <span class="font-bold text-xs text-slate-400">President's Recorder</span>
+                    <span class="text-[10px] text-slate-500 mt-1">Locked</span>
+                </div>
+                <div class="bg-slate-800/50 border border-slate-700 p-3 rounded-xl flex flex-col items-center text-center opacity-60">
+                    <i class="fa-solid fa-potion text-slate-500 text-2xl mb-2"></i>
+                    <span class="font-bold text-xs text-slate-400">Camaraderie Potion</span>
+                    <span class="text-[10px] text-slate-500 mt-1">Locked</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Story Lore Modal -->
+    <div id="loreModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-slate-800/80 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                <div class="flex items-center space-x-2 text-amber-400 font-bold">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>Legend Of A Bully - Full Story & Chapters</span>
+                </div>
+                <button onclick="toggleModal('loreModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-6 text-xs text-slate-300 leading-relaxed flex-1">
+                <div>
+                    <h3 class="font-bold text-sm text-amber-400 mb-2">Chapter 1: Introduction For The Ethics On Isolation Of The Bullies</h3>
+                    <p>Once upon a time in the place of "Legend Of A Bully", there lived good bullies and bad bullies. Good bullies are kind, gentle, and make trustworthy friends. The bad bullies approached arrogantly declaring they will destroy friendships with harsh secrets and fake plans...</p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-amber-400 mb-2">Chapter 2: Broken Plans Of Bad Bullies & Fake News Buffering</h3>
+                    <p>The bad bullies send fake news claiming the government will kill the good bullies, using fake audio recordings from President Jhay Hamps. The villagers and good bullies stand firm against the lies and accusations...</p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-amber-400 mb-2">Chapter 3: The Defender Good Bullies Together With People’s Camaraderie</h3>
+                    <p>With the death of the 5 bad bullies and their lies exposed, the good bullies and townspeople unite in peace, proving humility defeats arrogance and many trustworthy friends conquer few bullies.</p>
+                </div>
+                <div class="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl">
+                    <h4 class="font-bold text-amber-300 mb-1">Moral Lesson</h4>
+                    <p class="text-amber-200/80">In order to defeat the bully, you need more than friends so they can trust you. Be humble so many can help you. You can never win when nobody trusts you!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Resize canvas to fill container
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Game State
+        const gameState = {
+            player: {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                radius: 18,
+                speed: 4,
+                hp: 100,
+                maxHp: 100,
+                xp: 0,
+                maxXp: 100,
+                level: 1,
+                atk: 15,
+                def: 10,
+                humility: 50,
+                direction: 'down'
+            },
+            keys: {},
+            camera: { x: 0, y: 0 },
+            villagers: [
+                { id: 1, x: 200, y: 150, name: "Village Elder", spoken: false, text: "Welcome traveler! Do not believe the bad bullies' fake news about the government." },
+                { id: 2, x: 700, y: 200, name: "Townsman", spoken: false, text: "We stand with the good bullies! Camaraderie is our strength." },
+                { id: 3, x: 400, y: 600, name: "Humble Merchant", spoken: false, text: "Stay humble and the 5 bad bullies will never break our trust!" }
+            ],
+            badBullies: [
+                { id: 1, x: 900, y: 300, hp: 60, maxHp: 60, atk: 12, name: "Arrogant Bully Alpha", defeated: false, radius: 20 },
+                { id: 2, x: 1000, y: 700, hp: 70, maxHp: 70, atk: 14, name: "Fake News spreader", defeated: false, radius: 20 },
+                { id: 3, x: 200, y: 800, hp: 80, maxHp: 80, atk: 16, name: "Secret Saboteur", defeated: false, radius: 20 },
+                { id: 4, x: 1100, y: 400, hp: 90, maxHp: 90, atk: 18, name: "Buffer Overthinker", defeated: false, radius: 20 },
+                { id: 5, x: 600, y: 900, hp: 120, maxHp: 120, atk: 22, name: "Boss: President Jhay Hamps", defeated: false, radius: 28, isBoss: true }
+            ],
+            questProgress: {
+                talkedVillagers: 0,
+                defeatedBullies: 0,
+                currentChapter: 1
+            },
+            particles: []
+        };
+
+        // Keyboard Input listeners
+        window.addEventListener('keydown', (e) => {
+            gameState.keys[e.code] = true;
+            if (e.code === 'Space') {
+                playerAttack();
+            }
+            if (e.code === 'KeyE') {
+                playerInteract();
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            gameState.keys[e.code] = false;
+        });
+
+        function setKey(code, isPressed) {
+            gameState.keys[code] = isPressed;
+            if (code === 'KeySpace' && isPressed) playerAttack();
+        }
+
+        // Modal toggling
+        function toggleModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.toggle('hidden');
+        }
+
+        // Dialogue System
+        function showDialogue(speaker, text) {
+            document.getElementById('dialogueSpeaker').innerText = speaker;
+            document.getElementById('dialogueText').innerText = text;
+            document.getElementById('dialogueBox').classList.remove('hidden');
+        }
+
+        function closeDialogue() {
+            document.getElementById('dialogueBox').classList.add('hidden');
+        }
+
+        // Player Attack mechanics
+        function playerAttack() {
+            sfx.swing();
+            // Create slash particle
+            gameState.particles.push({
+                x: gameState.player.x,
+                y: gameState.player.y,
+                radius: 35,
+                alpha: 1,
+                color: '#3b82f6'
+            });
+
+            // Check collision with bad bullies
+            gameState.badBullies.forEach(bully => {
+                if (!bully.defeated) {
+                    const dist = Math.hypot(bully.x - gameState.player.x, bully.y - gameState.player.y);
+                    if (dist < 60) {
+                        bully.hp -= gameState.player.atk;
+                        sfx.hit();
+                        // Pushback
+                        bully.x += (bully.x - gameState.player.x) * 0.2;
+                        bully.y += (bully.y - gameState.player.y) * 0.2;
+
+                        if (bully.hp <= 0) {
+                            bully.defeated = true;
+                            gameState.questProgress.defeatedBullies++;
+                            addXP(bully.isBoss ? 100 : 35);
+                            if (bully.isBoss) {
+                                sfx.bossDefeat();
+                                showDialogue("Legend Of A Bully Victory!", "President Jhay Hamps and the bad bullies' fake news have been defeated! Camaraderie and humility triumph!");
+                                updateQuestState();
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Player Interact with villagers or items
+        function playerInteract() {
+            gameState.villagers.forEach(v => {
+                const dist = Math.hypot(v.x - gameState.player.x, v.y - gameState.player.y);
+                if (dist < 50) {
+                    showDialogue(v.name, v.text);
+                    if (!v.spoken) {
+                        v.spoken = true;
+                        gameState.questProgress.talkedVillagers++;
+                        addXP(25);
+                        sfx.pickup();
+                        updateQuestState();
+                    }
+                }
+            });
+        }
+
+        function addXP(amount) {
+            gameState.player.xp += amount;
+            document.getElementById('xpText').innerText = `${gameState.player.xp}/${gameState.player.maxXp}`;
+            document.getElementById('xpBar').style.width = `${(gameState.player.xp / gameState.player.maxXp) * 100}%`;
+
+            if (gameState.player.xp >= gameState.player.maxXp) {
+                gameState.player.level++;
+                gameState.player.xp = 0;
+                gameState.player.maxXp = Math.floor(gameState.player.maxXp * 1.3);
+                gameState.player.maxHp += 20;
+                gameState.player.hp = gameState.player.maxHp;
+                gameState.player.atk += 5;
+                gameState.player.humility += 15;
+
+                sfx.levelUp();
+                document.getElementById('playerLevel').innerText = `LVL ${gameState.player.level}`;
+                document.getElementById('playerName').innerText = `Good Bully Hero (Lv.${gameState.player.level})`;
+                document.getElementById('hpText').innerText = `${gameState.player.hp}/${gameState.player.maxHp}`;
+                document.getElementById('hpBar').style.width = '100%';
+                document.getElementById('statAtk').innerText = gameState.player.atk;
+                document.getElementById('statHumility').innerText = gameState.player.humility;
+
+                showDialogue("Level Up!", `Congratulations! You reached Level ${gameState.player.level}. Humility and camaraderie make you stronger!`);
+            }
+        }
+
+        function updateQuestState() {
+            if (gameState.questProgress.talkedVillagers >= 3 && gameState.questProgress.currentChapter === 1) {
+                gameState.questProgress.currentChapter = 2;
+                document.getElementById('q1Status').innerText = "COMPLETED";
+                document.getElementById('q1Status').className = "bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded font-bold";
+                document.getElementById('q1Bar').style.width = "100%";
+                document.getElementById('q1Bar').className = "bg-emerald-500 h-full";
+
+                document.getElementById('q2Status').innerText = "IN PROGRESS";
+                document.getElementById('q2Status').className = "bg-blue-500/20 text-blue-300 text-[10px] px-2 py-0.5 rounded font-bold";
+                document.getElementById('activeQuestTitle').innerText = "Chapter 2: Defeat the 5 Bad Bullies";
+                document.getElementById('activeQuestDesc').innerText = "Defeat all 5 bad bullies and President Jhay Hamps to stop fake news buffering.";
+                showDialogue("Chapter 2 Unlocked!", "The villagers have united in camaraderie! Now defeat the 5 Bad Bullies spreading fake news!");
+            }
+
+            if (gameState.questProgress.defeatedBullies >= 5 && gameState.questProgress.currentChapter === 2) {
+                gameState.questProgress.currentChapter = 3;
+                document.getElementById('q2Status').innerText = "COMPLETED";
+                document.getElementById('q2Status').className = "bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded font-bold";
+                document.getElementById('q3Status').innerText = "COMPLETED";
+                document.getElementById('q3Status').className = "bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded font-bold";
+
+                document.getElementById('activeQuestTitle').innerText = "Chapter 3: Peace Restored";
+                document.getElementById('activeQuestDesc').innerText = "Absolute peace is restored to Legend Of A Bully through humility and unity!";
+                showDialogue("Chapter 3 Complete!", "Absolute peace restored! Legend Of A Bully is saved through humility!");
+            }
+        }
+
+        function unlockSkill(skill) {
+            sfx.pickup();
+            if (skill === 'wave') {
+                document.getElementById('btnWave').innerText = "Unlocked";
+                document.getElementById('btnWave').className = "bg-purple-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold";
+                showDialogue("Skill Unlocked!", "Camaraderie Wave unlocked! Villagers will now occasionally aid you in combat.");
+            } else if (skill === 'aura') {
+                document.getElementById('btnAura').innerText = "Unlocked";
+                document.getElementById('btnAura').className = "bg-purple-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold";
+                showDialogue("Skill Unlocked!", "Truth Aura unlocked! Immunity to fake news buffering effects active.");
+            }
+        }
+
+        // Game Loop Update & Render
+        function update() {
+            // Movement logic
+            let dx = 0;
+            let dy = 0;
+            if (gameState.keys['ArrowUp'] || gameState.keys['KeyW']) { dy -= 1; gameState.player.direction = 'up'; }
+            if (gameState.keys['ArrowDown'] || gameState.keys['KeyS']) { dy += 1; gameState.player.direction = 'down'; }
+            if (gameState.keys['ArrowLeft'] || gameState.keys['KeyA']) { dx -= 1; gameState.player.direction = 'left'; }
+            if (gameState.keys['ArrowRight'] || gameState.keys['KeyD']) { dx += 1; gameState.player.direction = 'right'; }
+
+            if (dx !== 0 && dy !== 0) {
+                dx *= 0.7071;
+                dy *= 0.7071;
+            }
+
+            gameState.player.x += dx * gameState.player.speed;
+            gameState.player.y += dy * gameState.player.speed;
+
+            // Boundaries
+            gameState.player.x = Math.max(30, Math.min(1400, gameState.player.x));
+            gameState.player.y = Math.max(30, Math.min(1400, gameState.player.y));
+
+            // Camera follow
+            gameState.camera.x = gameState.player.x - canvas.width / 2;
+            gameState.camera.y = gameState.player.y - canvas.height / 2;
+
+            // Bad bullies AI (chase player if close)
+            gameState.badBullies.forEach(bully => {
+                if (!bully.defeated) {
+                    const dist = Math.hypot(gameState.player.x - bully.x, gameState.player.y - bully.y);
+                    if (dist < 300 && dist > 25) {
+                        const angle = Math.atan2(gameState.player.y - bully.y, gameState.player.x - bully.x);
+                        bully.x += Math.cos(angle) * 1.5;
+                        bully.y += Math.sin(angle) * 1.5;
+                    }
+                    // Attack player if very close
+                    if (dist < 35 && Math.random() < 0.03) {
+                        gameState.player.hp -= Math.max(2, bully.atk - gameState.player.def / 2);
+                        sfx.hit();
+                        document.getElementById('hpText').innerText = `${Math.max(0, Math.floor(gameState.player.hp))}/${gameState.player.maxHp}`;
+                        document.getElementById('hpBar').style.width = `${Math.max(0, (gameState.player.hp / gameState.player.maxHp) * 100)}%`;
+
+                        if (gameState.player.hp <= 0) {
+                            gameState.player.hp = gameState.player.maxHp;
+                            showDialogue("Defeated", "You were overwhelmed by fake news buffering! But humility revives you to try again.");
+                        }
+                    }
+                }
+            });
+
+            // Particles fade
+            gameState.particles.forEach((p, index) => {
+                p.radius += 2;
+                p.alpha -= 0.05;
+                if (p.alpha <= 0) gameState.particles.splice(index, 1);
+            });
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(-gameState.camera.x, -gameState.camera.y);
+
+            // Draw World Grid / Terrain
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            const gridSize = 80;
+            const startX = Math.floor(gameState.camera.x / gridSize) * gridSize;
+            const startY = Math.floor(gameState.camera.y / gridSize) * gridSize;
+            for (let x = startX; x < startX + canvas.width + gridSize; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, gameState.camera.y);
+                ctx.lineTo(x, gameState.camera.y + canvas.height);
+                ctx.stroke();
+            }
+            for (let y = startY; y < startY + canvas.height + gridSize; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(gameState.camera.x, y);
+                ctx.lineTo(gameState.camera.x + canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Draw Safe Zone Town Center (Legend Of A Bully Sanctuary)
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
+            ctx.beginPath();
+            ctx.arc(450, 400, 250, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 6]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw Villagers
+            gameState.villagers.forEach(v => {
+                ctx.fillStyle = v.spoken ? '#10b981' : '#3b82f6';
+                ctx.beginPath();
+                ctx.arc(v.x, v.y, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#f3f4f6';
+                ctx.font = '10px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText(v.name, v.x, v.y - 22);
+            });
+
+            // Draw Bad Bullies
+            gameState.badBullies.forEach(bully => {
+                if (!bully.defeated) {
+                    ctx.fillStyle = bully.isBoss ? '#ef4444' : '#f97316';
+                    ctx.beginPath();
+                    ctx.arc(bully.x, bully.y, bully.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#7c2d12';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+
+                    // HP bar above bully
+                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    ctx.fillRect(bully.x - 20, bully.y - bully.radius - 12, 40, 6);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(bully.x - 20, bully.y - bully.radius - 12, 40 * (bully.hp / bully.maxHp), 6);
+
+                    ctx.fillStyle = '#f3f4f6';
+                    ctx.font = '10px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(bully.name, bully.x, bully.y - bully.radius - 16);
+                }
+            });
+
+            // Draw Player Character (Good Bully Hero)
+            ctx.fillStyle = '#3b82f6';
+            ctx.beginPath();
+            ctx.arc(gameState.player.x, gameState.player.y, gameState.player.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#93c5fd';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Player Direction Indicator
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            let pEyeX = gameState.player.x;
+            let pEyeY = gameState.player.y;
+            if (gameState.player.direction === 'up') pEyeY -= 8;
+            if (gameState.player.direction === 'down') pEyeY += 8;
+            if (gameState.player.direction === 'left') pEyeX -= 8;
+            if (gameState.player.direction === 'right') pEyeX += 8;
+            ctx.arc(pEyeX, pEyeY, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Attack Particles / Slashes
+            gameState.particles.forEach(p => {
+                ctx.strokeStyle = p.color;
+                ctx.globalAlpha = p.alpha;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(gameState.player.x, gameState.player.y, p.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+            });
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game loop on load
+        window.onload = function() {
+            gameLoop();
+        };
+    </script>
+
+</body>
+</html>
